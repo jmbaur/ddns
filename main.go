@@ -19,8 +19,7 @@ type cfRecord struct {
 }
 
 type cfResp struct {
-	Result []cfRecord
-
+	Result  []cfRecord
 	Success bool `json:"success"`
 }
 
