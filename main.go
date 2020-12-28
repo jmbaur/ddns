@@ -23,12 +23,11 @@ type cfResp struct {
 	Success bool `json:"success"`
 }
 
-var cachedIP string
-
 func main() {
 	zoneID := os.Getenv("ZONE_ID")
 	email := os.Getenv("EMAIL")
 	apiToken := os.Getenv("API_TOKEN")
+	recordName := os.Getenv("RECORD_NAME")
 
 	resp, err := http.Get("https://ifconfig.me")
 	if err != nil {
@@ -39,11 +38,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("External IP Address: %s\n", data)
-	if cachedIP == string(data) {
-		fmt.Println("External IP has not changed, exiting...")
-		os.Exit(0)
-	}
+	extIP := string(data)
 	/////////////////////////////////////////////////////////////////////////////
 	client := &http.Client{}
 	cfGet, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records", zoneID), nil)
@@ -70,23 +65,29 @@ func main() {
 	// TODO: loop through results
 	var recordOfInterest cfRecord
 	for _, v := range cfRespData.Result {
-		if v.Type == "A" {
+		if v.Name == recordName {
 			recordOfInterest = cfRespData.Result[0]
 		}
 	}
-	fmt.Printf("Current DNS record: %s\n", recordOfInterest.Content)
-	cachedIP = recordOfInterest.Content
 	/////////////////////////////////////////////////////////////////////////////
-	body, _ := json.Marshal(struct {
-		Content string `json:"content"`
-	}{Content: string(data)})
+	if recordOfInterest.Content != extIP {
+		body, _ := json.Marshal(struct {
+			Content string `json:"content"`
+		}{Content: extIP})
 
-	cfPatch, err := http.NewRequest(http.MethodPatch, fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records/%s", zoneID, recordOfInterest.ID), bytes.NewReader(body))
-	if err != nil {
-		log.Fatal(err)
+		cfPatch, err := http.NewRequest(http.MethodPatch, fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records/%s", zoneID, recordOfInterest.ID), bytes.NewReader(body))
+		if err != nil {
+			log.Fatal(err)
+		}
+		cfPatch.Header.Add("Content-Type", "application/json")
+		cfPatch.Header.Add("X-Auth-Email", email)
+		cfPatch.Header.Add("X-Auth-Key", apiToken)
+		_, err = client.Do(cfPatch)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("External IP changed, updated Cloudflare")
+	} else {
+		fmt.Println("No change to external IP")
 	}
-	cfPatch.Header.Add("Content-Type", "application/json")
-	cfPatch.Header.Add("X-Auth-Email", email)
-	cfPatch.Header.Add("X-Auth-Key", apiToken)
-	client.Do(cfPatch)
 }
