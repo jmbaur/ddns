@@ -75,35 +75,36 @@ func main() {
 			recordOfInterest = cfRespData.Result[0]
 		}
 	}
-	if recordOfInterest.Content != extIP {
-		body, _ := json.Marshal(struct {
-			Content string `json:"content"`
-		}{Content: extIP})
-
-		cfPatch, err := http.NewRequest(http.MethodPatch, fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records/%s", zoneID, recordOfInterest.ID), bytes.NewReader(body))
-		if err != nil {
-			log.Fatal(err)
-		}
-		cfPatch.Header.Add("Content-Type", "application/json")
-		cfPatch.Header.Add("X-Auth-Email", email)
-		cfPatch.Header.Add("X-Auth-Key", apiToken)
-		resp, err = client.Do(cfPatch)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer resp.Body.Close()
-		data, err := ioutil.ReadAll(resp.Body)
-		cfPatchResp := cfResp{}
-		json.Unmarshal(data, &cfPatchResp)
-		if cfPatchResp.Success != true {
-			log.Println("Failed to update external IP")
-			for _, v := range cfPatchResp.Errors {
-				log.Printf("code: %d message: %s\n", v.Code, v.Message)
-			}
-			os.Exit(1)
-		}
-		fmt.Println("External IP changed, updated Cloudflare")
-	} else {
+	if recordOfInterest.Content == extIP {
 		fmt.Println("No change to external IP")
+		return
 	}
+
+	body, _ := json.Marshal(struct {
+		Content string `json:"content"`
+	}{Content: extIP})
+
+	cfPatch, err := http.NewRequest(http.MethodPatch, fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records/%s", zoneID, recordOfInterest.ID), bytes.NewReader(body))
+	if err != nil {
+		log.Fatal(err)
+	}
+	cfPatch.Header.Add("Content-Type", "application/json")
+	cfPatch.Header.Add("X-Auth-Email", email)
+	cfPatch.Header.Add("X-Auth-Key", apiToken)
+	resp, err = client.Do(cfPatch)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+	data, err = ioutil.ReadAll(resp.Body)
+	cfPatchResp := cfResp{}
+	json.Unmarshal(data, &cfPatchResp)
+	if cfPatchResp.Success != true {
+		log.Println("Failed to update external IP")
+		for _, v := range cfPatchResp.Errors {
+			log.Printf("code: %d message: %s\n", v.Code, v.Message)
+		}
+		os.Exit(1)
+	}
+	fmt.Println("External IP changed, updated Cloudflare")
 }
